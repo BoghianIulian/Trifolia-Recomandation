@@ -1,0 +1,19 @@
+import pandas as pd
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
+# Încarcă fișierul Excel
+df = pd.read_excel("produse6.xlsx")
+df["full_text"] = df["Descriere Produs"].fillna("").astype(str)
+
+# Încarcă modelul
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# Vectorizează descrierile
+embeddings = model.encode(df["full_text"].tolist(), show_progress_bar=True)
+
+# Salvează embeddings și metadatele
+np.save("embeddings.npy", embeddings)
+df.to_pickle("metadata.pkl")
+
+print("✅ Salvat: embeddings.npy și metadata.pkl")
