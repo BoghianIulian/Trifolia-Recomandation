@@ -1,31 +1,32 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List
-import pandas as pd
 import numpy as np
-from sentence_transformers import SentenceTransformer
+import pandas as pd
 import faiss
+from sentence_transformers import SentenceTransformer
 
 app = FastAPI()
 
-# Încarcă datele
-df = pd.read_excel("produse6.xlsx")
-df["full_text"] = df["Descriere Produs"].fillna("").astype(str)
+# Încarcă embeddings preprocesați și metadatele
+embeddings = np.load("embeddings.npy")
+df = pd.read_pickle("metadata.pkl")
 
-# Încarcă modelul și creează indexul
-model = SentenceTransformer("all-MiniLM-L6-v2")
-embeddings = model.encode(df["full_text"].tolist(), show_progress_bar=True)
+# Creează index FAISS
 dimension = embeddings.shape[1]
 index = faiss.IndexFlatL2(dimension)
-index.add(np.array(embeddings))
+index.add(embeddings)
 
+# Selectează doar coloanele relevante
 product_metadata = df[[
     "Denumire Produs", "Descriere Produs", "Pret",
     "Imagine principala", "Categorie / Categorii",
     "Link Canonic Implicit Produs"
 ]]
 
-# Model pentru request
+# Încarcă modelul (doar o dată)
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# Modelul cererii primite
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
@@ -35,7 +36,6 @@ def search_products(request: QueryRequest):
     query_embedding = model.encode([request.query])
     distances, indices = index.search(np.array(query_embedding), request.top_k)
     results = []
-
     for i in indices[0]:
         produs = product_metadata.iloc[i]
         results.append({
@@ -44,5 +44,4 @@ def search_products(request: QueryRequest):
             "descriere": str(produs.get("Descriere Produs", ""))[:200],
             "link": produs.get("Link Canonic Implicit Produs", "")
         })
-
     return {"rezultate": results}
